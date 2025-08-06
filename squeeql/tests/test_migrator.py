@@ -1,0 +1,252 @@
+# coding: utf-8
+
+"""Unit tests for "Simple declarative schema migration for SQLite".
+
+See <https://david.rothlis.net/declarative-schema-migration-for-sqlite>.
+
+Author: William Manley <will@stb-tester.com>.
+Copyright © 2019-2022 Stb-tester.com Ltd.
+License: MIT.
+"""
+
+import logging
+import sqlite3
+
+import pytest
+
+from squeeql.migrator import dumb_migrate_db, normalise_sql
+
+
+_TEST_SCHEMAS = [
+    # 0
+    "",
+    # 1
+    """\
+    CREATE TABLE Node(
+        node_oid INTEGER PRIMARY KEY NOT NULL,
+        node_id INTEGER NOT NULL);
+    CREATE UNIQUE INDEX Node_node_id on Node(node_id);
+    """,
+    # 2
+    # Added Node.active
+    # Changed node_id type from INTEGER to TEXT
+    # New table Job
+    """\
+    PRAGMA foreign_keys = 1;
+
+    CREATE TABLE Node(
+        node_oid INTEGER PRIMARY KEY NOT NULL,
+        node_id TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT(1),
+        something_else TEXT);
+    CREATE UNIQUE INDEX Node_node_id on Node(node_id);
+
+    CREATE TABLE Job(
+        node_oid INTEGER NOT NULL,
+        id INTEGER NOT NULL,
+        FOREIGN KEY(node_oid) REFERENCES Node(node_oid));
+    CREATE UNIQUE INDEX Job_node_oid on Job(node_oid, id);
+    """,
+    # 3
+    # Remove field something_else.  Note: this is significant because
+    # Job.node_oid references table Node which must be recreated.
+    """\
+    PRAGMA foreign_keys = 1;
+
+    CREATE TABLE Node(
+        node_oid INTEGER PRIMARY KEY NOT NULL,
+        node_id TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT(1));
+    CREATE UNIQUE INDEX Node_node_id on Node(node_id);
+
+    CREATE TABLE Job(
+        node_oid INTEGER NOT NULL,
+        id INTEGER NOT NULL,
+        FOREIGN KEY(node_oid) REFERENCES Node(node_oid));
+    CREATE UNIQUE INDEX Job_node_oid on Job(node_oid, id);
+    """,
+    # 4
+    # Change index Node_node_id field
+    # Delete index Job_node_id
+    # Set user_version = 6
+    """\
+    PRAGMA foreign_keys = 1;
+
+    CREATE TABLE Node(
+        node_oid INTEGER PRIMARY KEY NOT NULL,
+        node_id TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT(1));
+    CREATE UNIQUE INDEX Node_node_id on Node(node_oid);
+
+    CREATE TABLE Job(
+        node_oid INTEGER NOT NULL,
+        id INTEGER NOT NULL,
+        FOREIGN KEY(node_oid) REFERENCES Node(node_oid));
+    CREATE UNIQUE INDEX Job_node_oid on Job(node_oid, id);
+
+    PRAGMA user_version = 6;
+    """,
+    # 5
+    # (vs. schema[1]) - Change Node.active default from 1 to 2
+    """\
+    CREATE TABLE Node(
+        node_oid INTEGER PRIMARY KEY NOT NULL,
+        node_id TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT(2));
+    CREATE UNIQUE INDEX Node_node_id on Node(node_id);
+    """
+]
+
+
+def test_dumb_db_migration_schema_migration():
+    db = None
+
+    def dump_sqlite_master(db):
+        out = []
+        for type_, name, tbl_name, sql in db.execute(
+                "SELECT type, name, tbl_name, sql FROM sqlite_master"):
+            out.append({
+                "type": type_,
+                "name": name,
+                "tbl_name": tbl_name,
+                "sql": normalise_sql(sql),
+            })
+        out.sort(key=lambda x: x['name'])
+        return out
+
+    def assert_schema_equal(schema):
+        pristine = sqlite3.connect(':memory:')
+        pristine.executescript(schema)
+        assert dump_sqlite_master(pristine) == dump_sqlite_master(db)
+
+        pristine_sql = "\n".join(sorted(
+            normalise_sql(x) for x in pristine.iterdump()))
+        db_sql = "\n".join(sorted(normalise_sql(x) for x in db.iterdump()))
+        assert pristine_sql == db_sql
+
+        for pragma in ["user_version", "foreign_keys"]:
+            assert pristine.execute("PRAGMA %s" % pragma).fetchone()[0] == \
+                db.execute("PRAGMA %s" % pragma).fetchone()[0], \
+                "Value for PRAGMA %s does not match" % pragma
+
+    db = sqlite3.connect(':memory:', isolation_level=None)
+    assert_schema_equal(_TEST_SCHEMAS[0])
+
+    combos = [
+        # from, to, need_allow_deletions
+        (0, 0, False),
+        (0, 1, False),
+        (0, 2, False),
+        (0, 3, False),
+        (0, 4, False),
+        (1, 0, True),
+        (1, 1, False),
+        (1, 2, False),
+        (1, 3, False),
+        (1, 4, False),
+        (2, 0, True),
+        (2, 1, True),
+        (2, 2, False),
+        (2, 3, True),
+        (2, 4, True),
+        (3, 0, True),
+        (3, 1, True),
+        (3, 2, False),
+        (3, 3, False),
+        (3, 4, False),
+    ]
+
+    for from_, to, need_allow_deletions in combos:
+        db = sqlite3.connect(':memory:', isolation_level=None)
+        logging.info("Testing from %s to %s", from_, to)
+        db.executescript(_TEST_SCHEMAS[from_])
+        if need_allow_deletions:
+            with pytest.raises(RuntimeError):
+                dumb_migrate_db(db, _TEST_SCHEMAS[to])
+            # The transaction should make the RuntimeError above revert any work
+            # in progress
+            assert_schema_equal(_TEST_SCHEMAS[from_])
+        changed = dumb_migrate_db(
+            db, _TEST_SCHEMAS[to], allow_deletions=need_allow_deletions)
+        assert changed == (from_ != to)
+        assert_schema_equal(_TEST_SCHEMAS[to])
+
+        assert not dumb_migrate_db(db, _TEST_SCHEMAS[to])
+
+
+def test_dumb_db_migration_data_migration():
+    # Check that data is preserved during the migration:
+    db = sqlite3.connect(':memory:', isolation_level=None)
+    db.executescript(_TEST_SCHEMAS[1])
+    db.executemany("""\
+        INSERT INTO Node(node_oid, node_id)
+        VALUES (?, ?)""", [
+            (0, 0),
+            (1, 100),
+        ])
+    assert db.execute("SELECT node_oid, node_id FROM Node").fetchall() == [
+        (0, 0),
+        (1, 100),
+    ]
+
+    dumb_migrate_db(db, _TEST_SCHEMAS[2])
+    assert db.execute(
+        "SELECT node_oid, node_id, active FROM Node").fetchall() == [
+        (0, "0", 1),
+        (1, "100", 1),
+    ]
+
+    db.execute("UPDATE Node SET active = 0, node_id = \"abc\" "
+               "WHERE node_oid == 0")
+
+    # Insert Job data.  It has a FOREIGN KEY back into Node.  We want to be sure
+    # that this FOREIGN KEY isn't confused by the migration
+    db.executemany("""\
+        INSERT INTO Job(node_oid, id)
+        VALUES (?, ?)""", [
+            (0, 1234),
+            (0, 5432),
+            (1, 1234),
+            (1, 9876),
+        ])
+    assert db.execute("""\
+        SELECT node_id, id
+        FROM Job
+        INNER JOIN Node ON Node.node_oid == Job.node_oid""").fetchall() == [
+        ("abc", 1234),
+        ("abc", 5432),
+        ("100", 1234),
+        ("100", 9876),
+    ]
+
+    dumb_migrate_db(db, _TEST_SCHEMAS[3], allow_deletions=True)
+
+    assert db.execute("""\
+        SELECT node_id, id
+        FROM Job
+        INNER JOIN Node ON Node.node_oid == Job.node_oid""").fetchall() == [
+        ("abc", 1234),
+        ("abc", 5432),
+        ("100", 1234),
+        ("100", 9876),
+    ]
+
+    # The new default for active should not affect existing rows with defaulted
+    # values:
+    dumb_migrate_db(db, _TEST_SCHEMAS[4])
+    assert db.execute(
+        "SELECT node_oid, node_id, active FROM Node").fetchall() == [
+        (0, "abc", 0),
+        (1, "100", 1),
+    ]
+
+    db.execute("UPDATE Node SET active = 0, node_id = \"0\" "
+               "WHERE node_oid == 0")
+
+    # And delete the active column again removing the data:
+    dumb_migrate_db(db, _TEST_SCHEMAS[1], allow_deletions=True)
+    assert db.execute(
+        "SELECT node_oid, node_id FROM Node").fetchall() == [
+        (0, 0),
+        (1, 100),
+    ]

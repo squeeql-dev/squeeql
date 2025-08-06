@@ -1,0 +1,6 @@
+*~
+*.bak
+*.pyc
+__pycache__
+.venv
+
