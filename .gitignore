@@ -1,6 +1,14 @@
 *~
+.#*
 *.bak
 *.pyc
 __pycache__
 .venv
 
+# Coverage reporting
+.coverage
+coverage.*
+htmlcov/
+
+# Poetry
+poetry.lock

@@ -1,0 +1,17 @@
+[project]
+name = "squeeql"
+version = "2025.08"
+requires-python = ">=3.9"
+description = "Simple utilities for using sqlite3."
+readme = "README.md"
+license-files = ["COPYING", "COPYING.LGPL"]
+
+[project.optional-dependencies]
+test = ["black>=24.10.0", "pytest>=8.3.5", "pytest-cov>=5.0.0,<6.0"]
+
+[project.urls]
+Repository = "https://github.com/squeeql-dev/squeeql"
+Issues = "https://github.com/squeeql-dev/squeeql/issues"
+
+[tool.pytest.ini_options]
+addopts = "--cov=squeeql --cov-report json --cov-report term"
