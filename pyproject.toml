@@ -1,6 +1,6 @@
 [project]
 name = "squeeql"
-version = "2025.08"
+version = "2025.8.1"
 requires-python = ">=3.9"
 description = "Simple utilities for using sqlite3."
 readme = "README.md"
@@ -15,3 +15,7 @@ Issues = "https://github.com/squeeql-dev/squeeql/issues"
 
 [tool.pytest.ini_options]
 addopts = "--cov=squeeql --cov-report json --cov-report term"
+
+[build-system]
+requires = ["setuptools >= 80.0"]
+build-backend = "setuptools.build_meta"

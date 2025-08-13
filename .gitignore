@@ -12,3 +12,7 @@ htmlcov/
 
 # Poetry
 poetry.lock
+
+# Distribution
+dist/
+*.egg-info/
