@@ -21,7 +21,7 @@ from time import sleep
 from squeeql import utils
 
 
-def test_dbopen():
+def test_dbopen() -> None:
     dbpath = "file:database?mode=memory&cache=shared"
     # For memory backed database testing, of multilpe connections,
     # we must hold a connection open, but test via the with statement
@@ -38,7 +38,7 @@ def test_dbopen():
     _con.close()
 
 
-def test_normalize_sql():
+def test_normalize_sql() -> None:
     assert (
         utils.normalize_sql(
             """\
