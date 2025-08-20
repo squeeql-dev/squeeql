@@ -111,6 +111,7 @@ _TEST_SCHEMAS = [
         id INTEGER PRIMARY KEY NOT NULL,
         Name TEXT NOT NULL
     );
+    CREATE VIEW Names AS SELECT Name from Name;
     """,
 ]
 
@@ -174,6 +175,8 @@ class MigratorTestCase(unittest.TestCase):
             (0, 6, False),
             (6, 6, False),
             (6, 0, True),
+            (6, 5, True),
+            (5, 6, True),
         ]
     )
     def test_dumb_schema_migration(

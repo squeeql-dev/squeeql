@@ -140,6 +140,28 @@ class DBMigrator:
             WHERE type = \"index\""""
             ).fetchall()
         )
+        pristine_views = dict(
+            self.pristine.execute(
+                """\
+                SELECT name, sql FROM sqlite_master
+                WHERE type = \"view\"
+                """
+            ).fetchall()
+        )
+
+        views = dict(
+            self.db.execute(
+                """\
+                SELECT name, sql FROM sqlite_master
+                WHERE type = \"view\"
+                """
+            ).fetchall()
+        )
+
+        # Existing views must be dropped before tables migration can succeed
+        for view_name in views.keys():
+            self.log_execute(f"Drop view {view_name}", f"DROP VIEW {view_name}")
+            self.n_changes -= 1
 
         tables = dict(
             self.db.execute(
@@ -259,6 +281,11 @@ class DBMigrator:
                     f"Index {name} changed: Creating updated version in its place",
                     sql,
                 )
+
+        # Now that tables and indices have migrated, we can recreate the views
+        for name, sql in pristine_views.items():
+            self.log_execute(f"Create view {name}", sql)
+            self.n_changes -= 1
 
         self._migrate_pragma("user_version")
 
