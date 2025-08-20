@@ -18,10 +18,11 @@ import re
 import sqlite3
 
 from os import PathLike
+from types import TracebackType
 
 
 class dbopen:
-    def __init__(self, filename: PathLike, *args, **kwargs):
+    def __init__(self, filename: PathLike, *args, **kwargs) -> None:
         self._filename = filename
         self._args = args
         self._kwargs = kwargs
@@ -30,7 +31,12 @@ class dbopen:
         self._db = sqlite3.connect(self._filename, *self._args, **self._kwargs)
         return self._db
 
-    def __exit__(self, exc_type, exc_value, exc_tb) -> bool:
+    def __exit__(
+        self,
+        exc_type: BaseException | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self._db.commit()
         self._db.close()
 

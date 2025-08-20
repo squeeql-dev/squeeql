@@ -1,7 +1,7 @@
 [project]
 name = "squeeql"
 version = "2025.8.1"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 description = "Simple utilities for using sqlite3."
 readme = "README.md"
 license-files = ["COPYING", "COPYING.LGPL"]

@@ -18,6 +18,9 @@ import logging
 import re
 import sqlite3
 
+from types import TracebackType
+from typing import Any
+
 from squeeql.utils import normalize_sql
 
 _INTERNAL_TABLES = [
@@ -28,7 +31,11 @@ _INTERNAL_TABLES = [
 ]
 
 
-def dumb_migrate_db(db, schema, allow_deletions=False):
+def dumb_migrate_db(
+    db: sqlite3.Connection,
+    schema: str,
+    allow_deletions: bool = False,
+) -> bool:
     """
     Migrates a database to the new schema given by the SQL text `schema`
     preserving the data.  We create any table that exists in schema, delete any
@@ -69,7 +76,12 @@ def dumb_migrate_db(db, schema, allow_deletions=False):
 
 
 class DBMigrator:
-    def __init__(self, db, schema, allow_deletions=False):
+    def __init__(
+        self,
+        db: sqlite3.Connection,
+        schema: str,
+        allow_deletions: bool = False,
+    ) -> None:
         self.db = db
         self.schema = schema
         self.allow_deletions = allow_deletions
@@ -80,14 +92,14 @@ class DBMigrator:
 
         self.orig_foreign_keys = None
 
-    def log_execute(self, msg, sql):
+    def log_execute(self, msg: str, sql: str) -> None:
         # It's important to log any changes we're making to the database for
         # forensics later
         logging.info(msg)
         self.db.execute(sql)
         self.n_changes += 1
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         self.orig_foreign_keys = self.db.execute(
             "PRAGMA foreign_keys",
         ).fetchone()[0]
@@ -103,7 +115,12 @@ class DBMigrator:
         self.db.execute("BEGIN")
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_tb):
+    def __exit__(
+        self,
+        exc_type: BaseException | None,
+        exc_value: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.db.__exit__(exc_type, exc_value, exc_tb)
         if exc_value is None:
             # The SQLite docs say:
@@ -129,7 +146,7 @@ class DBMigrator:
                     "PRAGMA foreign_keys = ON",
                 )
 
-    def migrate(self):
+    def migrate(self) -> None:
         # In CI the database schema may be changing all the time.  This checks
         # the current db and if it doesn't match database.sql we will
         # modify it so it does match where possible.
@@ -306,7 +323,7 @@ class DBMigrator:
                     "Database migration: Would fail foreign_key_check",
                 )
 
-    def _migrate_pragma(self, pragma):
+    def _migrate_pragma(self, pragma: str) -> Any:
         pristine_val = self.pristine.execute(f"PRAGMA {pragma}").fetchone()[0]
         val = self.db.execute(f"PRAGMA {pragma}").fetchone()[0]
 
