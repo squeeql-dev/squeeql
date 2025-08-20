@@ -178,8 +178,9 @@ class DBMigrator:
             create_table_sql = pristine_tables[tbl_name]
             create_table_sql = re.sub(
                 r"\b%s\b" % re.escape(tbl_name),
-                tbl_name + "_migration_new",
+                f"{tbl_name}_migration_new",
                 create_table_sql,
+                count=1,
             )
             self.log_execute(
                 f"Columns change: Create table {tbl_name} with updated schema",

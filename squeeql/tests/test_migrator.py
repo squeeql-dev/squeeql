@@ -104,6 +104,14 @@ _TEST_SCHEMAS = [
         active BOOLEAN NOT NULL DEFAULT(2));
     CREATE UNIQUE INDEX Node_node_id on Node(node_id);
     """,
+    # 6
+    # Create a table containing a column of the same name
+    """\
+    CREATE TABLE Name(
+        id INTEGER PRIMARY KEY NOT NULL,
+        Name TEXT NOT NULL
+    );
+    """,
 ]
 
 
@@ -163,6 +171,9 @@ class MigratorTestCase(unittest.TestCase):
             (3, 2, False),
             (3, 3, False),
             (3, 4, False),
+            (0, 6, False),
+            (6, 6, False),
+            (6, 0, True),
         ]
     )
     def test_dumb_schema_migration(
