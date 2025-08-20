@@ -20,6 +20,13 @@ import sqlite3
 
 from squeeql.utils import normalize_sql
 
+_INTERNAL_TABLES = [
+    "sqlite_stat1",
+    "sqlite_stat2",
+    "sqlite_stat3",
+    "sqlite_stat4",
+]
+
 
 def dumb_migrate_db(db, schema, allow_deletions=False):
     """
@@ -171,8 +178,12 @@ class DBMigrator:
             ).fetchall()
         )
 
-        new_tables = set(pristine_tables.keys()) - set(tables.keys())
-        removed_tables = set(tables.keys()) - set(pristine_tables.keys())
+        new_tables = (
+            set(pristine_tables.keys()) - set(tables.keys()) - set(_INTERNAL_TABLES)
+        )
+        removed_tables = (
+            set(tables.keys()) - set(pristine_tables.keys()) - set(_INTERNAL_TABLES)
+        )
         if removed_tables and not self.allow_deletions:
             raise RuntimeError(
                 f"Database migration: Refusing to delete tables {removed_tables!r}"
@@ -182,7 +193,7 @@ class DBMigrator:
             name
             for name, sql in pristine_tables.items()
             if normalize_sql(tables.get(name, "")) != normalize_sql(sql)
-        )
+        ) - set(_INTERNAL_TABLES)
 
         # This PRAGMA is automatically disabled when the db is committed
         self.db.execute("PRAGMA defer_foreign_keys = TRUE")
