@@ -22,7 +22,7 @@ import pytest
 
 from parameterized import parameterized
 
-from squeeql.migrator import dumb_migrate_db
+from squeeql.migrator import _INTERNAL_TABLES, dumb_migrate_db
 from squeeql.utils import normalize_sql
 
 
@@ -123,6 +123,8 @@ class MigratorTestCase(unittest.TestCase):
         for type_, name, tbl_name, sql in db.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_master"
         ):
+            if tbl_name in _INTERNAL_TABLES:
+                continue
             out.append(
                 {
                     "type": type_,
